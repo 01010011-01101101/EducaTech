@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EduTech - Plataforma Educacional</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3B82F6',
+                        secondary: '#8B5CF6',
+                        accent: '#10B981'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .fade-in {
+            animation: fadeIn 0.5s ease-in;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .hover-scale {
+            transition: transform 0.2s ease;
+        }
+
+        .hover-scale:hover {
+            transform: scale(1.02);
+        }
+
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .notification {
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div id="app"></div>
+
+    <script>
+        // Sistema de Armazenamento Persistente
+        class StorageManager {
+            static save(key, data) {
+                try {
+                    localStorage.setItem(`edutech_${key}`, JSON.stringify(data));
+                } catch (error) {
+                    console.error('Erro ao salvar dados:', error);
+                }
+            }
+
+            static load(key) {
+                try {
+                    const data = localStorage.getItem(`edutech_${key}`);
+                    return data ? JSON.parse(data) : null;
+                } catch (error) {
+                    console.error('Erro ao carregar dados:', error);
+                    return null;
+                }
+            }
+
+            static remove(key) {
+                try {
+                    localStorage.removeItem(`edutech_${key}`);
+                } catch (error) {
+                    console.error('Erro ao remover dados:', error);
+                }
+            }
+        }
+
+        // Sistema de Gamificação
+        class GamificationSystem {
+            static getPlayerData() {
+                const user = Auth.getCurrentUser();
+                if (!user) return null;
+                const userId = user.uid;
+                const allPlayers = StorageManager.load('playerData') || {};
+                return allPlayers[userId] || {
+                    points: 0,
+                    level: 1,
+                    badges: [],
+                    streak: 0,
+                    completedTasks: 0,
+                    studyMinutes: 0
+                };
+            }
+
+            static savePlayerData(data) {
+                const userId = Auth.getCurrentUser().uid;
+                const allPlayers = StorageManager.load('playerData') || {};
+                allPlayers[userId] = data;
+                StorageManager.save('playerData', allPlayers);
+            }
+
+            static addPoints(points, reason) {
+                const playerData = this.getPlayerData();
+                if (!playerData) return;
+                playerData.points += points;
+                playerData.level = Math.floor(playerData.points / 100) + 1;
+                
+                this.savePlayerData(playerData);
+                this.checkBadges(playerData);
+                
+                NotificationSystem.show(`+${points} pontos! ${reason}`, 'success');
+                return playerData;
+            }
+
+            static checkBadges(playerData) {
+                const badges = [
+                    { id: 'first_study', name: 'Primeira Sessão', icon: '🎯', condition: () => playerData.completedTasks >= 1 },
+                    { id: 'dedicated', name: 'Dedicado', icon: '📚', condition: () => playerData.completedTasks >= 10 },
+                    { id: 'scholar', name: 'Estudioso', icon: '🎓', condition: () => playerData.studyMinutes >= 300 },
+                    { id: 'streak_3', name: 'Sequência de 3', icon: '🔥', condition: () => playerData.streak >= 3 },
+                    { id: 'level_5', name: 'Nível 5', icon: '⭐', condition: () => playerData.level >= 5 }
+                ];
+
+                badges.forEach(badge => {
+                    if (badge.condition() && !playerData.badges.includes(badge.id)) {
+                        playerData.badges.push(badge.id);
+                        NotificationSystem.show(`Nova medalha: ${badge.icon} ${badge.name}!`, 'success', 4000);
+                    }
+                });
+
+                this.savePlayerData(playerData);
+            }
+
+            static getBadgeInfo(badgeId) {
+                const badges = {
+                    'first_study': { name: 'Primeira Sessão', icon: '🎯', description: 'Completou sua primeira sessão de estudos' },
+                    'dedicated': { name: 'Dedicado', icon: '📚', description: 'Completou 10 tarefas de estudo' },
+                    'scholar': { name: 'Estudioso', icon: '🎓', description: 'Estudou por mais de 5 horas' },
+                    'streak_3': { name: 'Sequência de 3', icon: '🔥', description: 'Manteve uma sequência de 3 dias' },
+                    'level_5': { name: 'Nível 5', icon: '⭐', description: 'Alcançou o nível 5' }
+                };
+                return badges[badgeId] || { name: 'Desconhecida', icon: '❓', description: '' };
+            }
+        }
+
+        // Sistema de Autenticação
+        class Auth {
+            static login(email, password, rememberMe = false) {
+                const users = {
+                    'professor@demo.com': { 
+                        uid: 'prof1', 
+                        email: 'professor@demo.com', 
+                        name: 'Prof. Maria Silva', 
+                        role: 'teacher' 
+                    },
+                    'aluno@demo.com': { 
+                        uid: 'student1', 
+                        email: 'aluno@demo.com', 
+                        name: 'João Santos', 
+                        role: 'student' 
+                    }
+                };
+                
+                const user = users[email];
+                if (user && password === 'demo123') {
+                    StorageManager.save('currentUser', user);
+                    
+                    if (rememberMe) {
+                        const expiryDate = new Date();
+                        expiryDate.setDate(expiryDate.getDate() + 30);
+                        StorageManager.save('rememberLogin', {
+                            email: email,
+                            expiry: expiryDate.toISOString()
+                        });
+                    }
+                    
+                    return Promise.resolve(user);
+                }
+                return Promise.reject(new Error('Email ou senha incorretos'));
+            }
+
+            static register(email, password, name, role) {
+                const uid = 'user_' + Date.now();
+                const user = { uid, email, name, role, createdAt: new Date().toISOString() };
+                StorageManager.save('currentUser', user);
+                return Promise.resolve(user);
+            }
+
+            static logout() {
+                StorageManager.remove('currentUser');
+                StorageManager.remove('rememberLogin');
+                return Promise.resolve();
+            }
+
+            static getCurrentUser() {
+                return StorageManager.load('currentUser');
+            }
+
+            static checkRememberedLogin() {
+                const remembered = StorageManager.load('rememberLogin');
+                if (remembered && new Date(remembered.expiry) > new Date()) {
+                    return remembered.email;
+                }
+                StorageManager.remove('rememberLogin');
+                return null;
+            }
+        }
+
+        // Gerador de Cronograma Inteligente
+        class SmartScheduleGenerator {
+            static generateStudyPlan(exams) {
+                const studyPlans = [];
+                const today = new Date();
+                
+                exams.forEach(exam => {
+                    const examDate = new Date(exam.date);
+                    const daysUntilExam = Math.ceil((examDate - today) / (1000 * 60 * 60 * 24));
+                    
+                    if (daysUntilExam > 0) {
+                        const studyDays = Math.max(3, Math.floor(daysUntilExam * 0.7));
+                        const sessionsPerDay = daysUntilExam > 7 ? 1 : 2;
+                        
+                        for (let i = 0; i < studyDays; i++) {
+                            const studyDate = new Date(today);
+                            studyDate.setDate(today.getDate() + i);
+                            
+                            for (let session = 0; session < sessionsPerDay; session++) {
+                                const startHour = session === 0 ? 14 : 19;
+                                
+                                studyPlans.push({
+                                    id: `study_${exam.id}_${i}_${session}`,
+                                    title: `Estudar ${exam.subject} - ${exam.title}`,
+                                    subject: exam.subject,
+                                    date: studyDate.toISOString().split('T')[0],
+                                    time: `${startHour.toString().padStart(2, '0')}:00`,
+                                    duration: 90,
+                                    type: 'study-session',
+                                    examId: exam.id,
+                                    description: `Sessão de estudo para ${exam.title}`,
+                                    autoGenerated: true,
+                                    priority: this.calculatePriority(daysUntilExam, exam.importance || 'medium')
+                                });
+                            }
+                        }
+                        
+                        // Revisão final
+                        const reviewDate = new Date(examDate);
+                        reviewDate.setDate(examDate.getDate() - 1);
+                        
+                        studyPlans.push({
+                            id: `review_${exam.id}`,
+                            title: `Revisão Final - ${exam.title}`,
+                            subject: exam.subject,
+                            date: reviewDate.toISOString().split('T')[0],
+                            time: '10:00',
+                            duration: 120,
+                            type: 'final-review',
+                            examId: exam.id,
+                            description: 'Revisão final antes da prova',
+                            autoGenerated: true,
+                            priority: 'high'
+                        });
+                    }
+                });
+                
+                return studyPlans.sort((a, b) => {
+                    const priorityOrder = { 'high': 3, 'medium': 2, 'low': 1 };
+                    return priorityOrder[b.priority] - priorityOrder[a.priority];
+                });
+            }
+
+            static calculatePriority(daysUntil, importance) {
+                if (daysUntil <= 3) return 'high';
+                if (daysUntil <= 7 && importance === 'high') return 'high';
+                if (daysUntil <= 7) return 'medium';
+                return 'low';
+            }
+        }
+
+        // Sistema de Notificações
+        class NotificationSystem {
+            static show(message, type = 'info', duration = 3000) {
+                const notification = document.createElement('div');
+                notification.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg notification max-w-sm ${this.getTypeClasses(type)}`;
+                notification.innerHTML = `
+                    <div class="flex items-center space-x-3">
+                        <span class="text-lg">${this.getTypeIcon(type)}</span>
+                        <span class="flex-1">${message}</span>
+                        <button onclick="this.parentElement.parentElement.remove()" class="text-lg opacity-70 hover:opacity-100">×</button>
+                    </div>
+                `;
+                
+                document.body.appendChild(notification);
+                
+                setTimeout(() => {
+                    if (notification.parentElement) {
+                        notification.remove();
+                    }
+                }, duration);
+            }
+
+            static getTypeClasses(type) {
+                const classes = {
+                    'success': 'bg-green-500 text-white',
+                    'error': 'bg-red-500 text-white',
+                    'warning': 'bg-yellow-500 text-white',
+                    'info': 'bg-blue-500 text-white'
+                };
+                return classes[type] || classes.info;
+            }
+
+            static getTypeIcon(type) {
+                const icons = {
+                    'success': '✅',
+                    'error': '❌',
+                    'warning': '⚠️',
+                    'info': 'ℹ️'
+                };
+                return icons[type] || icons.info;
+            }
+
+            static checkUpcomingExams() {
+                const user = Auth.getCurrentUser();
+                if (!user || user.role !== 'student') return;
+
+                const exams = Database.getExams();
+                const today = new Date();
+                
+                exams.then(examList => {
+                    examList.forEach(exam => {
+                        const examDate = new Date(exam.date);
+                        const daysUntil = Math.ceil((examDate - today) / (1000 * 60 * 60 * 24));
+                        
+                        if (daysUntil === 1) {
+                            this.show(`🚨 Prova amanhã: ${exam.title}`, 'warning', 5000);
+                        } else if (daysUntil === 3) {
+                            this.show(`📚 Prova em 3 dias: ${exam.title}`, 'info', 4000);
+                        }
+                    });
+                });
+            }
+        }
+
+        // Banco de Dados
+        class Database {
+            // Agenda e Cronograma
+            static addScheduleEvent(event) {
+                const id = 'event_' + Date.now();
+                const userId = Auth.getCurrentUser().uid;
+                
+                const allEvents = StorageManager.load('scheduleEvents') || {};
+                if (!allEvents[userId]) allEvents[userId] = {};
+                
+                allEvents[userId][id] = { ...event, id, userId, createdAt: new Date().toISOString() };
+                StorageManager.save('scheduleEvents', allEvents);
+                
+                NotificationSystem.show('Evento adicionado com sucesso!', 'success');
+                return Promise.resolve(id);
+            }
+
+            static getScheduleEvents() {
+                const userId = Auth.getCurrentUser().uid;
+                const allEvents = StorageManager.load('scheduleEvents') || {};
+                const userEvents = allEvents[userId] || {};
+                return Promise.resolve(Object.values(userEvents));
+            }
+
+            static deleteScheduleEvent(eventId) {
+                const userId = Auth.getCurrentUser().uid;
+                const allEvents = StorageManager.load('scheduleEvents') || {};
+                
+                if (allEvents[userId] && allEvents[userId][eventId]) {
+                    delete allEvents[userId][eventId];
+                    StorageManager.save('scheduleEvents', allEvents);
+                    NotificationSystem.show('Evento removido!', 'info');
+                    return Promise.resolve();
+                }
+                return Promise.reject(new Error('Evento não encontrado'));
+            }
+
+            // Anotações e Links
+            static addNote(note) {
+                const id = 'note_' + Date.now();
+                const userId = Auth.getCurrentUser().uid;
+                
+                const allNotes = StorageManager.load('notes') || {};
+                if (!allNotes[userId]) allNotes[userId] = {};
+                
+                allNotes[userId][id] = { ...note, id, userId, createdAt: new Date().toISOString() };
+                StorageManager.save('notes', allNotes);
+                
+                NotificationSystem.show('Anotação salva!', 'success');
+                return Promise.resolve(id);
+            }
+
+            static getNotes() {
+                const userId = Auth.getCurrentUser().uid;
+                const allNotes = StorageManager.load('notes') || {};
+                const userNotes = allNotes[userId] || {};
+                return Promise.resolve(Object.values(userNotes));
+            }
+
+            static deleteNote(noteId) {
+                const userId = Auth.getCurrentUser().uid;
+                const allNotes = StorageManager.load('notes') || {};
+                
+                if (allNotes[userId] && allNotes[userId][noteId]) {
+                    delete allNotes[userId][noteId];
+                    StorageManager.save('notes', allNotes);
+                    NotificationSystem.show('Anotação removida!', 'info');
+                    return Promise.resolve();
+                }
+                return Promise.reject(new Error('Anotação não encontrada'));
+            }
+
+            // Grupos/Turmas
+            static createGroup(group) {
+                const id = 'group_' + Date.now();
+                const userId = Auth.getCurrentUser().uid;
+                
+                const allGroups = StorageManager.load('groups') || {};
+                if (!allGroups[userId]) allGroups[userId] = {};
+                
+                allGroups[userId][id] = { 
+                    ...group, 
+                    id, 
+                    teacherId: userId, 
+                    createdAt: new Date().toISOString(),
+                    students: [],
+                    posts: []
+                };
+                StorageManager.save('groups', allGroups);
+                
+                NotificationSystem.show('Turma criada com sucesso!', 'success');
+                return Promise.resolve(id);
+            }
+
+            static getGroups() {
+                const user = Auth.getCurrentUser();
+                const allGroups = StorageManager.load('groups') || {};
+                
+                if (user.role === 'teacher') {
+                    const teacherGroups = allGroups[user.uid] || {};
+                    return Promise.resolve(Object.values(teacherGroups));
+                } else {
+                    // Para alunos, buscar grupos onde estão inseridos
+                    const studentGroups = [];
+                    Object.values(allGroups).forEach(teacherGroups => {
+                        Object.values(teacherGroups).forEach(group => {
+                            if (group.students && group.students.includes(user.uid)) {
+                                studentGroups.push(group);
+                            }
+                        });
+                    });
+                    return Promise.resolve(studentGroups);
+                }
+            }
+            
+            static getGroupById(groupId) {
+                const allGroups = StorageManager.load('groups') || {};
+                let foundGroup = null;
+                Object.values(allGroups).forEach(teacherGroups => {
+                    if (teacherGroups[groupId]) {
+                        foundGroup = teacherGroups[groupId];
+                    }
+                });
+                return Promise.resolve(foundGroup);
+            }
+
+            static addStudentToGroup(groupId, studentId) {
+                const allGroups = StorageManager.load('groups') || {};
+                let group
